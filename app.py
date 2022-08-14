@@ -9,11 +9,9 @@ import dash
 import dash_core_components as dcc
 import dash_html_components as html
 import shap
-from dash.dependencies import Input, Output, ClientsideFunction
+from dash.dependencies import Input, Output
 from matplotlib import pyplot as plt
 import plotly.graph_objs as go
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import precision_score, recall_score
 
 
 app = dash.Dash(
@@ -32,10 +30,15 @@ features = pd.read_csv('./data/heloc_dataset_v1.csv')
 X = features.drop('RiskPerformance', axis=1)
 y = np.array(features['RiskPerformance'])
 
-train_X = pd.read_csv('trained_X.csv', index_col=0)
-train_y = pd.read_csv('trained_y.csv', index_col=0)
-test_X = pd.read_csv('tested_X.csv', index_col=0)
-test_y = pd.read_csv('tested_y.csv', index_col=0)
+FEATURE = X.columns.values
+df_0 = pd.read_csv('append2.csv')
+df_0 = df_0.iloc[:, 0:4]
+df_1 = pd.read_csv('MaxDelq2PublicRecLast12M.csv')
+df_1 = df_1.iloc[:,0:2]
+df_2 = pd.read_csv('MaxDelqEver.csv')
+df_2 = df_2.iloc[:,0:2]
+df_3 = pd.read_csv('special.csv')
+df_3 = df_3.iloc[:,0:2]
 
 
 id = X.index.values
@@ -47,8 +50,7 @@ max_external_bad = max(Bad_F.ExternalRiskEstimate)
 min_external_bad = min(Bad_F.ExternalRiskEstimate)
 max_external_good = max(Good_F.ExternalRiskEstimate)
 min_external_good = min(Good_F.ExternalRiskEstimate)
-# print(max_external,min_external)
-# the columns that stores the labels
+
 labelDimension = "RiskPerformance"
 
 # load trained model
@@ -56,24 +58,28 @@ dirs = 'SAVE_MODEL'
 if not os.path.exists(dirs):
     os.makedirs(dirs)
 model = joblib.load('./SAVE_MODEL/trained_model.pkl')
-# print(test_X)
-# test_X_array = np.array(test_X)
 
-pred = model.predict(test_X)
-acc = cross_val_score(model, X, y, scoring='accuracy', n_jobs=-1, error_score='raise')
-precise = precision_score(test_y, pred, pos_label='Good')
-rec = recall_score(test_y, pred, pos_label='Good')
-# SHAP explainer
+# SHAP explainer, only need to execute one time
 explainer = shap.TreeExplainer(model)
 
-y_importance = model.feature_importances_
+# Please remove the next few lines if you don't have these images in the folder!
+shap_values_sum = explainer.shap_values(X)
+shap.summary_plot(shap_values_sum, X, show=False, plot_type="bar",max_display=25)
+plt.savefig("full_importance_shapX",dpi=50,bbox_inches='tight')
+plt.clf()
+shap.summary_plot(shap_values_sum[0], X, show=False,max_display=25)
+plt.savefig("bad_importance_shapX",dpi=50,bbox_inches='tight')
+plt.clf()
+shap.summary_plot(shap_values_sum[1], X, show=False,max_display=25)
+plt.savefig("good_importance_shapX",dpi=50,bbox_inches='tight')
+plt.clf()
+
 
 app = dash.Dash(
     __name__, meta_tags=[{"name": "viewport", "content": "width=device-width"}],
 )
 app.title = "HELOC Analysis"
 server = app.server
-
 
 # Create app layout
 app.layout = html.Div(
@@ -132,274 +138,671 @@ app.layout = html.Div(
             style={"margin-bottom": "25px"},
         ),
 
-        # Global Part
-        # First row
+        # Prediction
         html.Div(
             [
                 html.Div(
                     [
-                        html.H6("Global Analysis"),
-                        html.P(
-                            "The aim of Global Analysis is to interpret the model from two aspects: the construction and evaluation.",
-                            className="control_label",
+                        html.H5("Model Prediction"),
+                        html.P("In this part, you can enter your data and use the model to predict the result. The result will automatical showed above the subscale analysis part. The contribution of each feature is shown in below. Blue represents the contribution in bad result and pink represents the contribution in good result."),
+                        html.Br(),
+                        "ExternalRiskEstimate:",
+                        dcc.Input(
+                            id="input_ExternalRiskEstimate",
+                            type="number",
+                            value = 0,
+                            placeholder="0",
                         ),
-                        html.P(
-                            "There are Feature Distribution, Feature Correlation, scores of evaluation(Accuracy, Recall...) \
-                            and Feature Importance to show more information about the HELOC model.",
-                            className="control_label",
+                        " MSinceOldestTradeOpen:",
+                        dcc.Input(
+                            id="input_MSinceOldestTradeOpen",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
                         ),
-                        html.P(
-                            "The scores of evaluation shows the precise of the model. The feature correlation shows \
-                            the relationship between the features.\
-                            In Feature distribution figure, you can select specific group of applicants\
-                            to check the feature importance for this group.",
-                            className="control_label",
+                        " MSinceMostRecentTradeOpen:",
+                        dcc.Input(
+                            id="input_MSinceMostRecentTradeOpen",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
                         ),
-                        html.P("Select Distribution Feature",
-                               className="control_label",
-                               ),
-                        dcc.Dropdown(
-                            id="dropdown-select-features",
-                            options=[
-                                {"label": "ExternalRiskEstimate", "value": "ExternalRiskEstimate"},
-                                {
-                                    "label": "NetFractionRevolvingBurden",
-                                    "value": "NetFractionRevolvingBurden",
-                                },
-                                {
-                                    "label": "AverageMInFile",
-                                    "value": "AverageMInFile",
-                                },
-                                {
-                                    "label": "MSinceMostRecentInqexcl7days",
-                                    "value": "MSinceMostRecentInqexcl7days",
-                                },
-                                {
-                                    "label": "MSinceMostRecentDelq",
-                                    "value": "MSinceMostRecentDelq",
-                                },
-                            ],
-                            value="ExternalRiskEstimate",
+                        html.Br(),
+                        " AverageMInFile:",
+                        dcc.Input(
+                            id="input_AverageMInFile",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
                         ),
-                        html.P(
-                            "Select feature with 'Good' result for distribution ",
-                            className="control_label",
+                        " NumSatisfactoryTrades:",
+                        dcc.Input(
+                            id="input_NumSatisfactoryTrades",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
                         ),
-                        dcc.RangeSlider(
-                            id="slider_good",
-                            min=min_external_good,
-                            max=max_external_good,
-                            value=[min_external_good, max_external_good],
-                            className="dcc_control",
+                        " NumTrades60Ever/DerogPubRec:",
+                        dcc.Input(
+                            id="input_NumTrades60Ever/DerogPubRec",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
                         ),
-                        html.P(
-                            "Select feature with 'Bad' result for distribution ",
-                            className="control_label",
+                        html.Br(),
+                        " NumTrades90Ever/DerogPubRec:",
+                        dcc.Input(
+                            id="input_NumTrades90Ever/DerogPubRec",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
                         ),
-                        dcc.RangeSlider(
-                            id="slider_bad",
-                            min=min_external_bad,
-                            max=max_external_bad,
-                            value=[min_external_bad, max_external_bad],
-                            className="dcc_control",
+                        " PercentTradesNeverDelq:",
+                        dcc.Input(
+                            id="input_PercentTradesNeverDelq",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " MSinceMostRecentDelq:",
+                        dcc.Input(
+                            id="input_MSinceMostRecentDelq",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        html.Br(),
+
+                        " MaxDelq/PublicRecLast12M:",
+                        dcc.Input(
+                            id="input_MaxDelq/PublicRecLast12M",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " MaxDelqEver:",
+                        dcc.Input(
+                            id="input_MaxDelqEver",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " NumTotalTrades:",
+                        dcc.Input(
+                            id="input_NumTotalTrades",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        html.Br(),
+
+                        " NumTradesOpeninLast12M:",
+                        dcc.Input(
+                            id="input_NumTradesOpeninLast12M",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " PercentInstallTrades:",
+                        dcc.Input(
+                            id="input_PercentInstallTrades",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " MSinceMostRecentInqexcl7days:",
+                        dcc.Input(
+                            id="input_MSinceMostRecentInqexcl7days",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        html.Br(),
+
+                        " NumInqLast6M:",
+                        dcc.Input(
+                            id="input_NumInqLast6M",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " NumInqLast6Mexcl7days:",
+                        dcc.Input(
+                            id="input_NumInqLast6Mexcl7days",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " NetFractionRevolvingBurden:",
+                        dcc.Input(
+                            id="input_NetFractionRevolvingBurden",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        html.Br(),
+
+                        " NetFractionInstallBurden:",
+                        dcc.Input(
+                            id="input_NetFractionInstallBurden",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " NumRevolvingTradesWBalance:",
+                        dcc.Input(
+                            id="input_NumRevolvingTradesWBalance",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " NumInstallTradesWBalance:",
+                        dcc.Input(
+                            id="input_NumInstallTradesWBalance",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        html.Br(),
+
+                        " NumBank/NatlTradesWHighUtilization:",
+                        dcc.Input(
+                            id="input_NumBank/NatlTradesWHighUtilization",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
+                        ),
+                        " PercentTradesWBalance:",
+                        dcc.Input(
+                            id="input_PercentTradesWBalance",
+                            type="number",
+                            placeholder="0",
+                            value=0,
+
                         ),
                     ],
-                    className="pretty_container four columns",
-                    id="global-filter",
+                    className="row, pretty_container",
+
                 ),
                 html.Div(
-                    [
-                        # evaluation result section
-                        html.Div(
                             [
+                                html.H5("Individual Analysis"),
+                                html.Br(),
+                                html.P("This part is to analyze the contribution of the features. In the upper plot, the force plot shows the most influenced features. In the lower plot, we combined 23 features and divided them into 10 subscale groups. You may find which subscale group contribute more to the good result and which did in the opposite way."),
+                                # Local Analyasis
                                 html.Div(
-                                    [html.H6(id="num_trained_applicants_text"),
-                                     html.P("Number of Applicants for train")],
-                                    id="train_applicants",
-                                    className="mini_container",
-                                ),
-                                html.Div(
-                                    [html.H6(id="num_test_applicants_text"), html.P("Number of Applicants for test")],
-                                    id="test_applicants",
-                                    className="mini_container",
-                                ),
-                                html.Div(
-                                    [html.H6(id="accuracy_text"), html.P("accuracy")],
-                                    id="accuracy",
-                                    className="mini_container",
-                                ),
-                                html.Div(
-                                    [html.H6(id="precise_text"), html.P("precise")],
-                                    id="precise",
-                                    className="mini_container",
-                                ),
-                                html.Div(
-                                    [html.H6(id="recall_text"), html.P("recall")],
-                                    id="recall",
-                                    className="mini_container",
+                                    [
+                                        html.H6("Subscale analysis"),
+                                        html.P("Subscale groups:"),
+                                        html.P("ExternalRiskEstimate=ExternalRiskEstimate"),
+                                        html.P("TradeOpenTime = MSinceOldestTradeOpen+MSinceMostRecentTradeOpen+AverageMInFile"),
+                                        html.P("NumSatisfactoryTrades = NumSatisfactoryTrades"),
+                                        html.P("TradeFrequency = NumTrades60Ever2DerogPubRec+NumTrades90Ever2DerogPubRec+NumTotalTrades+NumTradesOpeninLast12M"),
+                                        html.P("Delinquency = PercentTradesNeverDelq+MSinceMostRecentDelq+MaxDelq2PublicRecLast12M+MaxDelqEver"),
+                                        html.P("Installment = PercentInstallTrades+NetFractionInstallBurden+NumInstallTradesWBalance"),
+                                        html.P("Inquiry = MSinceMostRecentInqexcl7days+NumInqLast6M+NumInqLast6Mexcl7days"),
+                                        html.P("RevolvingBalance = NetFractionRevolvingBurden+NumRevolvingTradesWBalance"),
+                                        html.P("Utilization = NumBank2NatlTradesWHighUtilization"),
+                                        html.P("TradeWBalance = PercentTradesWBalance"),
+                                        dcc.Graph(id="waterfallfig"),
+                                        html.H6("Feature contribution"),
+                                        html.Iframe(
+                                            id="shap_iframe_id1",
+                                            srcDoc=None,
+                                            style={"scrolling": "no"},
+                                            className="iframe_container",
+                                        ),
+                                    ],
+                                    className="twelve columns",
                                 ),
                             ],
-                            id="info-container",
-                            className="row container-display",
-                        ),
-                        # correlation figure
-                        html.Div([
-                            html.Div(
-                                id="CH-graph-container",
-                                children=dcc.Loading(
-                                    className="graph-wrapper",
-                                    children=[
-                                        html.P("Feature Correlation"),
-                                        html.Img(src=app.get_asset_url('figureCorrelation.jpg'), height="100%",
-                                                 width="100%")],
-                                    style={"display": "none"},
-                                ),
-                            )],
-                            className="pretty_container",
-                        ),
-                    ],
-                    id="global-right-column",
-                    className="eight columns",
+                            className="row twelve columns pretty_container",
                 ),
+
+                html.Div(
+                    [
+                        html.H5("Related Cases"),
+                        html.Br(),
+                        # Local Analyasis
+                        dash_table.DataTable(
+                            id='table',
+                            # columns=[{"name": i, "id": i} for i in df.columns],
+                            data=[],
+                            style_cell_conditional=[
+                                {
+                                    'if': {'column_id': c},
+                                    'textAlign': 'left'
+                                } for c in ['Date', 'Region']
+                            ],
+                            style_table={'overflowX': 'scroll'},
+                            style_data_conditional=[
+                                {
+                                    'if': {
+                                        'row_index': 0,  # number | 'odd' | 'even',
+                                    },
+                                    'backgroundColor': 'rgb(255,199,115)',
+                                    'color': 'black'
+                                },
+                                {
+                                    'if': {
+                                        'row_index': 1,  # number | 'odd' | 'even',
+                                    },
+                                    'backgroundColor': 'rgb(255,117,0)',
+                                    'color': 'white'
+                                },
+                                {
+                                    'if': {
+                                        'filter_query': '{RiskPerformance} = "Good"'
+                                    },
+                                    'backgroundColor': '#0074D9',
+                                    'color': 'white'
+                                },
+                            ],
+                            style_header={
+                                # 'backgroundColor': 'rgb(210, 210, 210)',
+                                'color': 'white',
+                                'fontWeight': 'bold',
+                                'backgroundColor': 'grey'
+                            },
+                            style_data={
+                                'height': 'auto',
+                                'color': 'black',
+                                'backgroundColor': 'white'
+                            },
+                            style_cell={'fontSize': 14, 'font-family': 'sans-serif', 'margin-right': '8px',
+                                        'margin-left': '8px'},
+
+                            style_as_list_view=False,
+                        )
+                    ],#style={'width':10,},
+                    className="row twelve columns pretty_container",
+                ),
+
+
             ],
-            className="row flex-display",
-        ),
+                ),
+
         # Second row
         html.Div(
             [
-                # distribution to select(history graph)
-                html.Div(
-                    id="feature_distribution",
-                    children=[
-                        html.B("Feature distribution"),
-                        dcc.Graph(id="feature_distribution_fig_good"),
-                        dcc.Graph(id="feature_distribution_fig_bad"),
-                    ],
-                    className="pretty_container five column",
-                ),
                 # feature importance
+
                 html.Div(
                     id="feature_importance",
                     children=dcc.Loading(
                         className="graph-wrapper",
                         children=[
-                            html.B("Feature Importance"),
-                            html.Div(id="feature_importance_fig"),
-                            html.B("Feature Importance in 'Good' result"),
-                            html.Div(id="good_feature_importance_fig"),
-                            html.B("Feature Importance in 'Bad' result"),
-                            html.Div(id="bad_feature_importance_fig"),
+                            html.H5("Model analysis"),
+                            html.Div(
+                                [
+                                    html.B("Feature Importance in 'Bad' result"),
+                                    html.Div(id="bad_feature_importance_fig"),
+                                ],
+                                className="row four columns",
+                            ),
+
+                            html.Div(
+                                [
+                                    html.B("Feature Importance in 'Good' result"),
+                                    html.Div(id="good_feature_importance_fig"),
+                                ],
+                                className="row four columns",
+                            ),
+                            html.Div(
+                                [
+                                    html.B("Feature Importance"),
+                                    html.Div(id="feature_importance_fig"),
+
+                                ],
+                                className="row four columns",
+                            ),
                         ],
                         style={"display": "none"},
                     ),
-                    className="pretty_container seven column",
+                    className="pretty_container twelve columns",
                 ),
             ],
             className="row flex-display",
         ),
 
-        # Local Part
+        # Third fow: appendix
         html.Div(
             [
-                # Control Panel for Local
-                html.Div(
-                    [
-                        html.H6("Local Analysis"),
-                        html.P(
-                            "There are feature historical figure and individual feature importance figure for local analysis. \
-                            The historical figure is to compare the features between the test data and the most similar data. \
-                            You can enter the new data below. \
-                            And for feature importance, it's to get a knowledge about the contribution of the features \
-                            to the result for specific data point. The individual feature importance figure is \
-                             updated by select id below.",
-                            className="control_label",
-                        ),
-                        html.P("Select ID for local analysis", className="control_label", ),
-                        dcc.Dropdown(
-                            id="input_id",
-                            options=[{"label": i, "value": i} for i in id],
-                            value=id[0],
-                            className="dcc_control",
-                        ),
-                        html.Br(),
-                        html.P("Enter The New Data", className="control_label", ),
-                        html.Br(),
-                        html.P("ExternalRiskEstimate: "),
-                        dcc.Input(
-                            id="my-input1",
-                            type='number',
-                            value=10,
-                        ),
-                        html.Br(),
-                        html.P("NetFractionRevolvingBurden: "),
-                        dcc.Input(
-                            id="my-input2",
-                            value=10,
-                            type='number',
-                        ),
-                        html.Br(),
-                        html.P("AverageMinFile: "),
-                        dcc.Input(
-                            id="my-input3",
-                            value=10,
-                            type='number',
-                        ),
-                        html.Br(),
-                        html.P("MSinceMostRecentinqexcl7days: "),
-                        dcc.Input(
-                            id="my-input4",
-                            value=10,
-                            type='number',
-                        ),
+                html.Div([
+                    html.H5("Appendix-Feature Explanations"),
+                    html.Br(),
+                    # Local Analyasis
+                    dash_table.DataTable(
+                        id='FE',
+                        columns=[{"name": i, "id": i} for i in df_0.columns],
+                        data=df_0.to_dict('records'),
+                        # data = [],
+                        style_cell_conditional=[
+                            {
+                                'if': {'column_id': c},
+                                'textAlign': 'left'
+                            } for c in ['Date', 'Region']
+                        ],
+                        style_table={'overflowX': 'scroll'},
+                        style_header={
+                            # 'backgroundColor': 'rgb(210, 210, 210)',
+                            'textAlign': 'center',
+                            'color': 'white',
+                            'fontWeight': 'bold',
+                            'backgroundColor': 'grey'
+                        },
+                        style_data={
+                            'textAlign': 'center',
+                            'height': 'auto',
+                            'color': 'black',
+                            'backgroundColor': 'white'
+                        },
+                        style_cell={'fontSize': 10, 'font-family': 'sans-serif', 'margin-right': '8px',
+                                    'margin-left': '8px'},
+                        # style_data_conditional=[
+                        #     {
+                        #         'if': {'row_index': 'odd'},
+                        #         'backgroundColor': 'rgb(220, 220, 220)',
+                        #     }
+                        # ],
+                        style_as_list_view=False,
+                    )], ),#style={'width': 1085}
+                html.Div([
+                    html.B("MaxDelq2PublicRecLast12M Table"),
+                    html.Br(),
+                    # Local Analyasis
+                    dash_table.DataTable(
+                        id='MM',
+                        columns=[{"name": i, "id": i} for i in df_1.columns],
+                        data=df_1.to_dict('records'),
+                        # data = [],
+                        style_cell_conditional=[
+                            {
+                                'if': {'column_id': c},
+                                'textAlign': 'left'
+                            } for c in ['Date', 'Region']
+                        ],
+                        style_table={'overflowX': 'scroll'},
+                        style_header={
+                            # 'backgroundColor': 'rgb(210, 210, 210)',
+                            'textAlign': 'center',
+                            'color': 'white',
+                            'fontWeight': 'bold',
+                            'backgroundColor': 'grey'
+                        },
+                        style_data={
+                            'textAlign': 'center',
+                            'height': 'auto',
+                            'color': 'black',
+                            'backgroundColor': 'white'
+                        },
+                        style_cell={'fontSize': 10, 'font-family': 'sans-serif', 'margin-right': '8px',
+                                    'margin-left': '8px'},
+                        style_as_list_view=False,
+                    )], ),#style={'width': 1085}
+                html.Div([
+                    html.B("MaxDelqEver"),
+                    html.Br(),
+                    # Local Analyasis
+                    dash_table.DataTable(
+                        id='MD',
+                        columns=[{"name": i, "id": i} for i in df_2.columns],
+                        data=df_2.to_dict('records'),
+                        # data = [],
+                        style_cell_conditional=[
+                            {
+                                'if': {'column_id': c},
+                                'textAlign': 'left'
+                            } for c in ['Date', 'Region']
+                        ],
+                        style_table={'overflowX': 'scroll'},
+                        style_header={
+                            # 'backgroundColor': 'rgb(210, 210, 210)',
+                            'textAlign': 'center',
+                            'color': 'white',
+                            'fontWeight': 'bold',
+                            'backgroundColor': 'grey'
+                        },
+                        style_data={
+                            'textAlign': 'center',
+                            'height': 'auto',
+                            'color': 'black',
+                            'backgroundColor': 'white'
+                        },
+                        style_cell={'fontSize': 10, 'font-family': 'sans-serif', 'margin-right': '8px',
+                                    'margin-left': '8px'},
+                        style_as_list_view=False,
+                    )], ),#style={'width': 1085}
+                html.Div([
+                    html.B("Special Value"),
+                    html.Br(),
+                    # Local Analyasis
+                    dash_table.DataTable(
+                        id='sv',
+                        columns=[{"name": i, "id": i} for i in df_3.columns],
+                        data=df_3.to_dict('records'),
+                        # data = [],
+                        style_cell_conditional=[
+                            {
+                                'if': {'column_id': c},
+                                'textAlign': 'left'
+                            } for c in ['Date', 'Region']
+                        ],
+                        style_table={'overflowX': 'scroll'},
+                        style_header={
+                            # 'backgroundColor': 'rgb(210, 210, 210)',
+                            'textAlign': 'center',
+                            'color': 'white',
+                            'fontWeight': 'bold',
+                            'backgroundColor': 'grey'
+                        },
+                        style_data={
+                            'textAlign': 'center',
+                            'height': 'auto',
+                            'color': 'black',
+                            'backgroundColor': 'white'
+                        },
+                        style_cell={'fontSize': 10, 'font-family': 'sans-serif', 'margin-right': '8px',
+                                    'margin-left': '8px'},
 
-                    ],
-                    className="pretty_container four columns",
-                    id="local-filter",
-                ),
-                html.Div(
-                    [
-                        html.Div(
-                            [
-                                html.B("Local analysis"),
-                                html.Br(),
-                                # Local Analyasis
-                                html.Iframe(
-                                    id="shap_iframe_id",
-                                    srcDoc=None,
-                                    style={"scrolling": "no"},
-                                    className="iframe_container",
-                                ),
-                            ],
-                            className="pretty_container",
-                        ),
-                        html.Div(
-                            [
-                                html.B("Similar data analysis"),
-                                html.Hr(),
-                                dcc.Graph(id="ouput_barchart")],
-                            className="pretty_container",
-                        ),
-                    ],
-                    id="local-right-column",
-                    className="eight columns",
-                ),
+                        style_as_list_view=False,
+                    )], ),#style={'width': ''}
+
             ],
-            className="row flex-display",
-        ),
+            className="row twelve columns pretty_container",
+        )
+
+
+
     ],
     id="mainContainer",
     style={"display": "flex", "flex-direction": "column"},
 )
 
-# Create callbacks
-app.clientside_callback(
-    ClientsideFunction(namespace="clientside", function_name="resize"),
-    Output("output-clientside", "children"),
-    [
-        Input("feature_distribution_fig_good", "figure"),
-        Input("feature_distribution_fig_bad", "figure"),
-    ],
+# pred_input
+@app.callback(
+    Output("shap_iframe_id1", "srcDoc"),
+    [Input("input_{}".format(_), "value") for _ in FEATURE],
 )
+def pred_ana(f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f19,f20,f21,f22,f23):
+    feature_list = [f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f19,f20,f21,f22,f23]
+    pred_item = pd.DataFrame([feature_list],columns=FEATURE)
+    choosen_instance = pred_item
+    shap_v1 = explainer.shap_values(choosen_instance)
+    force_plot = shap.force_plot(explainer.expected_value[0], shap_v1[1], choosen_instance)
+
+    shap_html = f"<head>{shap.getjs()}</head><body scroll='no' style='overflow: hidden'>{force_plot.html() }</body>"
+
+    return shap_html
+
+@app.callback(
+    Output("waterfallfig", "figure"),
+    [Input("input_{}".format(_), "value") for _ in FEATURE],
+)
+def update_waterfall(f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f19,f20,f21,f22,f23):
+    # input = [60, 20, 22, -40, -20, -10, -5, 20, 30, -25, 50]
+    input_list = [f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f19,f20,f21,f22,f23]
+
+    pred_item = pd.DataFrame([input_list], columns=FEATURE)
+
+    choosen_instance = pred_item
+
+    shap_v1 = explainer.shap_values(choosen_instance)
+    sub_shap_val = [round(shap_v1[1][0][0],4), round(shap_v1[1][0][1] + shap_v1[1][0][2] + shap_v1[1][0][3],4), round(shap_v1[1][0][4],4),round(shap_v1[1][0][5] + shap_v1[1][0][6] + shap_v1[1][0][11] + shap_v1[1][0][12],4),round(shap_v1[1][0][7] + shap_v1[1][0][8] + shap_v1[1][0][9] + shap_v1[1][0][10],4),round(shap_v1[1][0][13] + shap_v1[1][0][18] + shap_v1[1][0][20],4),round(shap_v1[1][0][14] + shap_v1[1][0][15] + shap_v1[1][0][16],4), round(shap_v1[1][0][17] + shap_v1[1][0][19],4),round(shap_v1[1][0][21],4), round(shap_v1[1][0][22],4),round(explainer.expected_value[0],4)]
+    sum_temp = shap_v1[1][0][0] + shap_v1[1][0][1] + shap_v1[1][0][2] + shap_v1[1][0][3] + shap_v1[1][0][4] + shap_v1[1][0][5] + shap_v1[1][0][6] + shap_v1[1][0][11] + shap_v1[1][0][12] + shap_v1[1][0][7] + shap_v1[1][0][8] + shap_v1[1][0][9] + shap_v1[1][0][10] + shap_v1[1][0][13] + shap_v1[1][0][18] + shap_v1[1][0][20] + shap_v1[1][0][14] + shap_v1[1][0][15] + shap_v1[1][0][16] + shap_v1[1][0][17] + shap_v1[1][0][19] + shap_v1[1][0][21] + shap_v1[1][0][22]
+    print(f"sub_shap_val:{len(sub_shap_val)},sum_temp:{sum_temp},explainer:{explainer.expected_value[0]}")
+
+    sub_shap_val.append(round(sum_temp + explainer.expected_value[0],4))
+    input = sub_shap_val
+    res = model.predict(pred_item)
+    #print(f"input:{input}")
+    printintlist = []
+    for idx in range(0, 12):
+        if input[idx] > 0:
+            printint = "+" + str(input[idx])
+            printintlist.append(printint)
+        else:
+            printint = str(input[idx])
+            printintlist.append(printint)
+
+    figure = go.Figure(go.Waterfall(
+        name="Bad:blue,value=0, Good:pink,value=1", orientation="v",
+        measure=["relative", "relative", "relative", "relative", "relative", "relative", "relative", "relative",
+                 "relative", "relative", "relative","total"],
+        x=['ExternalRiskEstimate', 'TradeOpenTime', 'NumSatisfactoryTrades', 'TradeFrequency', 'Delinquency',
+           'Installment', 'Inquiry', 'RevolvingBalance', 'Utilization', 'TradeWBalance',"Expected value", 'total'],
+        textposition="outside",
+
+        text=[printintlist[0], printintlist[1], printintlist[2], printintlist[3], printintlist[4], printintlist[5],
+              printintlist[6], printintlist[7], printintlist[8], printintlist[9], printintlist[10],printintlist[11]],
+        y=input,
+        connector={"line": {"color": "rgb(0,0,0)"}},
+        decreasing={"marker": {"color": "rgb(30, 136, 229)"}},
+        increasing={"marker": {"color": "rgb(245, 39, 87)"}},
+        totals={"marker": {"color": "grey"}}
+    ))
+
+    figure.update_layout(
+        title="Prediction result:{}".format(res),
+        showlegend = True
+    )
+
+    return figure
+
+@app.callback(
+    [Output("table", "data"), Output('table', 'columns')],
+    [Input("input_{}".format(_), "value") for _ in FEATURE],
+)
+
+def createtable(f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f19,f20,f21,f22,f23):
+    input = [f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17, f18, f19, f20, f21, f22,f23]
+    df = changeform(input)
+    return df.to_dict('records'),[{"name": i, "id": i} for i in df.columns]
+
+def calculatemin5id(input):
+    b_1 = X
+    alldis = []
+    min5dis = []
+    for i in range(len(b_1)):
+        y1 = b_1.ExternalRiskEstimate.values[i]
+        y2 = b_1.MSinceOldestTradeOpen.values[i]
+        y3 = b_1.MSinceMostRecentTradeOpen.values[i]
+        y4 = b_1.AverageMInFile[i]
+        y5 = b_1.NumSatisfactoryTrades[i]
+        y6=b_1['NumTrades60Ever/DerogPubRec'].values[i]
+        y7=b_1['NumTrades90Ever/DerogPubRec'].values[i]
+        y8=b_1.PercentTradesNeverDelq.values[i]
+        y9=b_1.MSinceMostRecentDelq.values[i]
+        y10=b_1['MaxDelq/PublicRecLast12M'].values[i]
+        y11=b_1.MaxDelqEver.values[i]
+        y12=b_1.NumTotalTrades.values[i]
+        y13=b_1.NumTradesOpeninLast12M.values[i]
+        y14=b_1.PercentInstallTrades.values[i]
+        y15=b_1.MSinceMostRecentInqexcl7days.values[i]
+        y16=b_1.NumInqLast6M.values[i]
+        y17=b_1.NumInqLast6Mexcl7days.values[i]
+        y18=b_1.NetFractionRevolvingBurden.values[i]
+        y19=b_1.NetFractionInstallBurden.values[i]
+        y20=b_1.NumRevolvingTradesWBalance.values[i]
+        y21=b_1.NumInstallTradesWBalance.values[i]
+        y22=b_1['NumBank/NatlTradesWHighUtilization'].values[i]
+        y23=b_1.PercentTradesWBalance.values[i]
+        d=np.sqrt((input[0]-y1)**2+(input[1]-y2)**2+(input[2]-y3)**2+(input[3]-y4)**2+(input[4]-y5)**2+(input[5]-y6)**2+(input[6]-y7)**2+(input[7]-y8)**2+(input[8]-y9)**2+(input[9]-y10)**2+(input[10]-y11)**2+(input[11]-y12)**2+(input[12]-y13)**2+(input[13]-y14)**2+(input[14]-y15)**2+(input[15]-y16)**2+(input[16]-y17)**2+(input[17]-y18)**2+(input[18]-y19)**2+(input[19]-y20)**2+(input[20]-y21)**2+(input[21]-y22)**2+(input[22]-y23)**2)
+        # d=np.sqrt((80-y1)**2+(0-y2)**2+(0-y3)**2+(0-y4)**2+(0-y5)**2)
+        # print(d)
+        alldis.append(d)
+
+    alldis = np.array(alldis)
+    # np.argsort(alldis)
+    for i in range(0,5):
+        min5dis.append(np.argsort(alldis)[i])
+
+    return min5dis
+
+
+def createTableDf(input):
+    min5disid = calculatemin5id(input)
+    input.insert(0, 'Null')
+    min = features
+    df_sample = min.iloc[[min5disid[0], min5disid[1], min5disid[2], min5disid[3], min5disid[4]]].copy()
+    df_sample.loc[-1] = input  # adding a row
+    df_sample.sort_index(inplace=True)
+    df_sample = df_sample.rename(index={-1: 'Current'}).copy()
+    predictions = []
+    for idx in range(0, 6):
+        row = df_sample.iloc[idx]
+        instance = row[1:len(row)]
+        prediction = model.predict(instance.to_numpy().reshape(1, -1))
+        predictions.append(prediction[0])
+    df_sample.insert(0, 'Prediction', predictions)
+
+    return df_sample
+
+
+def changeform(input):
+    df = createTableDf(input)
+    df.reset_index(inplace=True)
+    df = df.rename(columns={'index':'ID'})
+    return df
+
+# pred_input
+@app.callback(
+    Output("shap_iframe_id1", "srcDoc"),
+    [Input("input_{}".format(_), "value") for _ in FEATURE],
+)
+
+def pred_ana(f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f19,f20,f21,f22,f23):
+    feature_list = [f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f19,f20,f21,f22,f23]
+    pred_item = pd.DataFrame([feature_list],columns=FEATURE)
+
+    choosen_instance = pred_item
+    shap_v1 = explainer.shap_values(choosen_instance)
+    force_plot = shap.force_plot(explainer.expected_value[0], shap_v1[1], choosen_instance)
+    print(f"{explainer.expected_value[0].shape,shap_v1[1].shape}")
+    shap_html = f"<head>{shap.getjs()}</head><body scroll='no' style='overflow: hidden'>{force_plot.html()}</body>"
+
+    return shap_html
 
 
 @app.callback(
@@ -408,296 +811,23 @@ app.clientside_callback(
         Output("good_feature_importance_fig", "children"),
         Output("bad_feature_importance_fig", "children"),
     ],
-    [
-        Input("slider_good", "value"),
-        Input("slider_bad", "value"),
-        Input("dropdown-select-features", "value"),
-    ]
+    Input("input_{}".format(FEATURE[0]), "value")
 )
-def update_feature_importance(select_good, select_bad, select_feature):
+def update_feature_importance(x1):
     # default feature importance figures
-    good_image_filename = 'good_importance_shap.png'
+    good_image_filename = 'good_importance_shapX.png'
     good_encoded_image = base64.b64encode(open(good_image_filename, 'rb').read())
-    good_importance = html.Img(src='data:image/png;base64,{}'.format(good_encoded_image.decode()), height="25%",
-                               width="100%")
-    bad_image_filename = 'bad_importance_shap.png'
+    good_importance = html.Img(src='data:image/png;base64,{}'.format(good_encoded_image.decode()))
+    bad_image_filename = 'bad_importance_shapX.png'
     bad_encoded_image = base64.b64encode(open(bad_image_filename, 'rb').read())
-    bad_importance = html.Img(src='data:image/png;base64,{}'.format(bad_encoded_image.decode()), height="25%",
-                              width="100%")
-    full_image_filename = 'full_importance_shap.png'
+    bad_importance = html.Img(src='data:image/png;base64,{}'.format(bad_encoded_image.decode()))#,width="33%"height="40%",
+    full_image_filename = 'full_importance_shapX.png'
     full_encoded_image = base64.b64encode(open(full_image_filename, 'rb').read())
-    full_importance = html.Img(src='data:image/png;base64,{}'.format(full_encoded_image.decode()), height="25%",
-                               width="100%")
-    l_good = select_good[0]
-    u_good = select_good[1]
-    l_bad = select_bad[0]
-    u_bad = select_bad[1]
-
-    # if select_good is not None:
-    if l_good != min(Good_F[select_feature]) and u_good != max(Good_F[select_feature]):
-        print(f"select_good:{select_good}")
-        good_filter = Good_F[Good_F[select_feature].isin(range(l_good, u_good))].drop('RiskPerformance', axis=1)
-        shap_values_good_filter = explainer.shap_values(good_filter)
-        shap.summary_plot(shap_values_good_filter[1], good_filter, show=False)
-        plt.savefig("filter_good_importance_shap1", dpi=50, bbox_inches='tight')
-        plt.clf()
-        good_image_filename = 'filter_good_importance_shap1.png'
-        good_encoded_image = base64.b64encode(open(good_image_filename, 'rb').read())
-        good_importance = html.Img(src='data:image/png;base64,{}'.format(good_encoded_image.decode()), height="25%",
-                                   width="100%")
-
-    if l_bad != min(Bad_F[select_feature]) and u_bad != max(Bad_F[select_feature]):
-        bad_filter = Bad_F[Bad_F[select_feature].isin(range(l_bad, u_bad))].drop('RiskPerformance', axis=1)
-        shap_values_bad_filter = explainer.shap_values(bad_filter)
-        shap.summary_plot(shap_values_bad_filter[0], bad_filter, show=False)
-        plt.savefig("filter_bad_importance_shap1", dpi=50, bbox_inches='tight')
-        plt.clf()
-        bad_image_filename = 'filter_bad_importance_shap1.png'
-        bad_encoded_image = base64.b64encode(open(bad_image_filename, 'rb').read())
-        bad_importance = html.Img(src='data:image/png;base64,{}'.format(bad_encoded_image.decode()), height="25%",
-                                  width="100%")
+    full_importance = html.Img(src='data:image/png;base64,{}'.format(full_encoded_image.decode()))
     return full_importance, good_importance, bad_importance
 
-
-# Slider_good <- distribution graph
-@app.callback(
-    [
-        Output("slider_good", "value"),
-        Output("slider_good", "min"),
-        Output("slider_good", "max"),
-    ],
-    [
-        Input("feature_distribution_fig_good", "selectedData"),
-        Input("dropdown-select-features", "value")
-    ]
-)
-def update_year_slider(count_graph_selected, feature_column):
-    l_bound = min(Good_F[feature_column])
-    u_bound = max(Good_F[feature_column])
-    if count_graph_selected is None:
-        return [l_bound, u_bound],l_bound,u_bound
-    nums = [point["x"] for point in count_graph_selected["points"]]
-    return [min(nums) + l_bound, max(nums) + l_bound + 1]
-
-
-@app.callback(
-    Output("feature_distribution_fig_good", "figure"),
-    [
-        Input("dropdown-select-features", "value"),
-        Input("slider_good", "value"),
-    ]
-)
-def update_feature_distribution(feature_column, selection):
-    df_G = Good_F.copy()
-
-    colors_good = []
-    feature_list = df_G[feature_column].sort_values()
-    feature_list.drop_duplicates('first', False)
-    feature_list = feature_list.tolist()
-    #print(feature_list)
-    for i in feature_list:
-        if i >= selection[0] and i <= selection[1]:
-            colors_good.append("rgb(255, 188, 46)")
-        else:
-            colors_good.append("rgba(255, 188, 46, 0.2)")
-
-    trace_select = go.Histogram(x=df_G[feature_column], opacity=0.75, marker=dict(color=colors_good), name='GOOD')
-    data = [trace_select]
-    layout = go.Layout(
-        title="Histogram of " + str(feature_column) + "in 'Good' result",
-        plot_bgcolor="#F9F9F9",
-        paper_bgcolor="#F9F9F9",
-        # paper_bgcolor = "#FFFFFF",
-        font={"color": "#a5b1cd"},
-        xaxis_title_text='Value',
-        yaxis_title_text='Count',
-        # dragmode='select',
-    )
-
-    figure = go.Figure(layout=layout)
-    figure.add_traces(data=data)
-    figure.update_layout(bargap=0.2)
-    # figure.add_traces(data=data)
-    return figure
-
-
-# Slider_bad <- distribution graph
-@app.callback(
-    [
-        Output("slider_bad", "value"),
-        Output("slider_bad", "min"),
-        Output("slider_bad", "max"),
-
-    ],
-    [
-        Input("feature_distribution_fig_bad", "selectedData"),
-        Input("dropdown-select-features", "value"),
-    ]
-)
-def update_year_slider(count_graph_selected, feature_column):
-    l_bound = min(Bad_F[feature_column])
-    u_bound = max(Bad_F[feature_column])
-    if count_graph_selected is None:
-        return [l_bound, u_bound],l_bound,u_bound
-    nums = [point["x"] for point in count_graph_selected["points"]]
-    return [min(nums) + l_bound, max(nums) + l_bound + 1]
-
-
-@app.callback(
-    Output("feature_distribution_fig_bad", "figure"),
-    [
-        Input("dropdown-select-features", "value"),
-        Input("slider_bad", "value"),
-    ]
-)
-def update_feature_distribution(feature_column, selection):
-    df = Bad_F.copy()
-    print(selection)
-
-    colors_bad = []
-    feature_list = df[feature_column].sort_values()
-    feature_list.drop_duplicates('first', False)
-    feature_list = feature_list.tolist()
-    print(feature_list)
-    for i in feature_list:
-        if i >= selection[0] and i <= selection[1]:
-            colors_bad.append("rgb(123, 199, 255)")
-        else:
-            colors_bad.append("rgba(123, 199, 255, 0.2)")
-
-    trace = go.Histogram(x=df[feature_column], opacity=0.75, marker={"color": colors_bad}, name='Bad')
-    data = [trace]
-    layout = go.Layout(
-        title="Histogram of " + str(feature_column) + "in 'Bad' result",
-        plot_bgcolor="#F9F9F9",
-        paper_bgcolor="#F9F9F9",
-        # paper_bgcolor = "#FFFFFF",
-        font={"color": "#a5b1cd"},
-        xaxis_title_text='Value',
-        yaxis_title_text='Count',
-        # dragmode='select',
-    )
-
-    figure = go.Figure(layout=layout)
-    figure.add_traces(data=data)
-    figure.update_layout(bargap=0.2)
-    return figure
-
-
-# individual feature importance
-@app.callback(
-    Output("shap_iframe_id", "srcDoc"),
-    Input("input_id", "value"),
-    prevent_initial_call=True,
-)
-def update_output_div(input_id):
-    if input_id == None:
-        choosen_instance = X.loc[[0]]
-    else:
-        choosen_instance = X.loc[[input_id]]
-    shap_v1 = explainer.shap_values(choosen_instance)
-    force_plot = shap.force_plot(explainer.expected_value[0], shap_v1[1], choosen_instance)
-
-    shap_html = f"<head>{shap.getjs()}</head><body scroll='no' style='overflow: hidden'>{force_plot.html()}</body>"
-
-    return shap_html
-
-
-@app.callback(
-    [
-        Output("num_trained_applicants_text", "children"),
-        Output("num_test_applicants_text", "children"),
-        Output("accuracy_text", "children"),
-        Output("precise_text", "children"),
-        Output("recall_text", "children"),
-    ],
-    [
-        Input("slider_good", "value"),
-        Input("slider_bad", "value"),
-        Input("dropdown-select-features", "value"),
-    ],
-)
-def update_text(select_good,select_bad,select_feature):
-    train_number_points = train_X.shape[0]
-    tot_num = X.shape[0]
-    test_num_points = tot_num - train_number_points
-    acc_model = acc.mean()
-    prec_model = precise.mean()
-    rec_model = rec.mean()
-    return train_number_points, test_num_points, round(acc_model, 3), round(prec_model, 3), round(rec_model, 3)
-
-
-@app.callback(
-    Output('ouput_barchart', 'figure'),
-    [
-        Input("my-input1", "value"),
-        Input("my-input2", "value"),
-        Input("my-input3", "value"),
-        Input("my-input4", "value"),
-    ]
-)
-def update_output_div(input_value1, input_value2, input_value3, input_value4):
-    index_list, input_data = cal_index(input_value1, input_value2, input_value3, input_value4)
-    return plot_bar(index_list, input_data)
-
-
-def loadDataFromCSV(filePath, report=False):
-    raw = pd.read_csv(filePath)
-    x = raw.values[:, 1:]
-    y = raw.values[:, 0]
-    if report:
-        print('x:', x.shape, 'y:', y.shape)
-    return x, y
-
-
-# selected features for input
-important_list = [7, 3, 14, 17]
-
-
-def cal_index(input1, input2, input3, input4, k=3):
-    '''
-    calculate the index of k-th nearest neighbor
-    input1,input2,input3,input4: input from the website
-    k= number of neighbor
-    '''
-    x, y = loadDataFromCSV(filePath, report=True)
-    dist = np.zeros(len(x))
-    x_normed = (x - x.min(axis=0)) / (x.max(axis=0) - x.min(axis=0))
-    input_data = np.mean(x_normed, axis=0)
-    for i in important_list:
-        input_data[i] -= x.min(axis=0)[i]
-    input_data[important_list[0]], input_data[important_list[1]], input_data[important_list[2]], input_data[
-        important_list[3]] = input1, input2, input3, input4
-    for i in range(len(x)):
-        dist[i] = np.linalg.norm(input_data - x_normed[i])
-    return np.argpartition(dist, k)[:k], input_data
-
-
-def plot_bar(index_list, input_data):
-    '''
-    plot the grouped bar chart by given index
-    also show the input data on figure
-    '''
-    y = []
-    for i in range(3):
-        y.append(pd.read_csv(filePath).iloc[index_list[i]].values)
-        if y[i][0] == 'Bad':
-            y[i][0] = 0
-        else:
-            y[i][0] = 200
-
-    data = [go.Bar(name='1st nearest neighbor', x=pd.read_csv(filePath).columns.values,
-                   y=y[0]),
-            go.Bar(name='2nd nearest neighbor', x=pd.read_csv(filePath).columns.values,
-                   y=y[1]),
-            go.Bar(name='3rd nearest neighbor', x=pd.read_csv(filePath).columns.values,
-                   y=y[2]),
-            go.Bar(name='input', x=pd.read_csv(filePath).columns.values, y=input_data)]
-    fig = go.Figure(data=data)
-    fig.update_layout(height=1500)
-    return fig
 
 
 # Main
 if __name__ == "__main__":
-    app.run_server(debug=False)
+    app.run_server(debug=False,host = '127.1.1.5')
